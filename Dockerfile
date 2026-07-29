@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# cfg-server-codeserver — the CFG Dev Box: per-user code-server (VS Code in
+# cfg-server-codeserver — the CodeBench: per-user code-server (VS Code in
 # the browser, coder/code-server, MIT) as a hosted tool-server kind (dt#204).
 #
 # The platform provisions ONE container per UserAppInstallation through the
@@ -31,7 +31,7 @@ FROM codercom/code-server:${CODE_SERVER_VERSION}
 ARG CODE_SERVER_VERSION
 
 LABEL org.opencontainers.image.title="cfg-server-codeserver" \
-      org.opencontainers.image.description="CFG Dev Box — per-user code-server (VS Code in the browser) tool-server kind" \
+      org.opencontainers.image.description="CodeBench — per-user code-server (VS Code in the browser) tool-server kind" \
       org.opencontainers.image.source="https://github.com/Crit-Fumble/cfg-server-codeserver" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${CODE_SERVER_VERSION}"
@@ -59,7 +59,7 @@ EXPOSE 8080/tcp
 #   PASSWORD              — code-server password auth (required; the launcher
 #                           derives it per-install and never stores it)
 #   CODESERVER_APP_NAME   — branding shown on the login page
-ENV CODESERVER_APP_NAME="CFG Dev Box"
+ENV CODESERVER_APP_NAME="CodeBench"
 
 # dumb-init comes from the upstream image; our entrypoint execs code-server
 # under it so SIGTERM lands cleanly on `docker stop`.
