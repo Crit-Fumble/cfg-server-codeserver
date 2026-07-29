@@ -12,7 +12,7 @@
 #                         on; code-server generates one into its config —
 #                         standalone `docker run` users read it from the log.
 #                         The platform ALWAYS sets it.)
-#   CODESERVER_APP_NAME — login-page branding (default: CodeBench)
+#   CODESERVER_APP_NAME — login-page branding (default: CFG code-server)
 
 set -euo pipefail
 
@@ -38,5 +38,5 @@ exec code-server \
   --auth password \
   --disable-telemetry \
   --disable-update-check \
-  --app-name "${CODESERVER_APP_NAME:-CodeBench}" \
+  --app-name "${CODESERVER_APP_NAME:-CFG code-server}" \
   "$HOME/projects"

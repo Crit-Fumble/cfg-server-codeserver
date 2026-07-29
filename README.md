@@ -1,6 +1,6 @@
 # cfg-server-codeserver
 
-The **CodeBench** — [code-server](https://github.com/coder/code-server) (VS
+The platform's hosted **code-server** — [code-server](https://github.com/coder/code-server) (VS
 Code in the browser, MIT) packaged as a Crit-Fumble **tool-server** kind: a
 per-user hosted dev environment, provisioned one container per installation by
 core-server's Server Manager and billed by active minute (dt#204).

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# cfg-server-codeserver — the CodeBench: per-user code-server (VS Code in
+# cfg-server-codeserver — per-user hosted code-server (VS Code in
 # the browser, coder/code-server, MIT) as a hosted tool-server kind (dt#204).
 #
 # The platform provisions ONE container per UserAppInstallation through the
@@ -59,7 +59,7 @@ EXPOSE 8080/tcp
 #   PASSWORD              — code-server password auth (required; the launcher
 #                           derives it per-install and never stores it)
 #   CODESERVER_APP_NAME   — branding shown on the login page
-ENV CODESERVER_APP_NAME="CodeBench"
+ENV CODESERVER_APP_NAME="CFG code-server"
 
 # dumb-init comes from the upstream image; our entrypoint execs code-server
 # under it so SIGTERM lands cleanly on `docker stop`.
