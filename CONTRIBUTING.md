@@ -11,7 +11,7 @@ suite; **Docker is the only prerequisite**.
 2. Smoke it: `docker run --rm -p 8080:8080 -e PASSWORD=dev cfg-server-codeserver:local`
    then open http://localhost:8080 and sign in.
 3. Verify health flips to `healthy`: `docker inspect --format '{{.State.Health.Status}}' <id>`
-4. PR against `main`. A push to `main` publishes
+4. PR against `next` — the release-candidate branch. A merge to `next` publishes
    `ghcr.io/crit-fumble/cfg-server-codeserver:latest`.
 
 ## Version bumps
