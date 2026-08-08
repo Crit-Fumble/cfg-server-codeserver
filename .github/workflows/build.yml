@@ -20,9 +20,9 @@ on:
   workflow_dispatch:
     inputs:
       code_server_version:
-        description: 'Upstream code-server version (image tag, e.g. 4.96.4)'
+        description: 'Upstream code-server version (image tag, e.g. 4.131.0)'
         required: false
-        default: '4.96.4'
+        default: '4.131.0'
 
 permissions:
   contents: read
@@ -68,7 +68,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # ⚠️ The fallback below overrides the Dockerfile ARG on every non-dispatch
+          # build — tag builds included. Keep it in sync with Dockerfile CODE_SERVER_VERSION.
           build-args: |
-            CODE_SERVER_VERSION=${{ github.event.inputs.code_server_version || '4.96.4' }}
+            CODE_SERVER_VERSION=${{ github.event.inputs.code_server_version || '4.131.0' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
