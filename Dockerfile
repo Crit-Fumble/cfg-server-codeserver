@@ -36,6 +36,14 @@ LABEL org.opencontainers.image.title="cfg-server-codeserver" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${CODE_SERVER_VERSION}"
 
+# ⚠️ `org.opencontainers.image.version` above does NOT survive to the published
+# image: docker/metadata-action emits its own OCI label set and `--label`
+# last-wins, so the release workflow overwrites it with the git tag (v0.1.0).
+# Auditing "what upstream is in here?" via the OCI label therefore reads back
+# OUR tag. The cfg.* namespace survives because the metadata action never emits
+# it. Verified against the published :latest on 2026-08-08.
+LABEL cfg.upstream.version="${CODE_SERVER_VERSION}"
+
 # The upstream image runs as `coder` (uid 1000) with dumb-init as PID 1 and
 # ships git + sudo. We only add curl (HEALTHCHECK) and our entrypoint.
 USER root
