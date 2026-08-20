@@ -26,9 +26,9 @@ on:
   workflow_dispatch:
     inputs:
       code_server_version:
-        description: 'Upstream code-server version (image tag, e.g. 4.131.0)'
+        description: 'Override the Dockerfile pin for an ad-hoc build (e.g. 4.133.0). Leave EMPTY to build the pinned version.'
         required: false
-        default: '4.131.0'
+        default: ''
 
 permissions:
   contents: read
@@ -56,6 +56,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ⛔ THE DOCKERFILE ARG IS THE ONLY HOME FOR THIS VERSION. This step used to
+      # be a literal `|| '4.131.0'` fallback inline in build-args, which silently
+      # OVERRODE the Dockerfile on every non-dispatch build — tag builds included.
+      # It drifted exactly as you would expect: the Dockerfile went to 4.133.0 via
+      # the upstream-watch bump (which cannot edit workflows — the fleet App has no
+      # `workflows` permission) while this file still forced 4.131.0, so `:latest`
+      # shipped 4.131.0 under a LABEL claiming 4.133.0, and nothing went red.
+      # Reading the pin instead of restating it makes that class impossible.
+      - name: Resolve code-server version
+        id: version
+        run: |
+          set -euo pipefail
+          requested='${{ github.event.inputs.code_server_version }}'
+          if [ -z "$requested" ]; then
+            resolved=$(sed -nE 's/^ARG CODE_SERVER_VERSION=(.*)$/\1/p' Dockerfile | head -1)
+          else
+            resolved="$requested"
+          fi
+          # A renamed/removed ARG must fail loudly, never build an empty version.
+          echo "$resolved" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            || { echo "::error::resolved code-server version '$resolved' is not a semver triple — is ARG CODE_SERVER_VERSION still in the Dockerfile?"; exit 1; }
+          echo "code_server=$resolved" >> "$GITHUB_OUTPUT"
+          echo "Resolved code-server version: $resolved"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -75,9 +99,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # ⚠️ The fallback below overrides the Dockerfile ARG on every non-dispatch
-          # build — tag builds included. Keep it in sync with Dockerfile CODE_SERVER_VERSION.
           build-args: |
-            CODE_SERVER_VERSION=${{ github.event.inputs.code_server_version || '4.131.0' }}
+            CODE_SERVER_VERSION=${{ steps.version.outputs.code_server }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
