@@ -24,7 +24,7 @@
 # Run (local test):
 #   docker run --rm -p 8080:8080 -e PASSWORD=dev -v /tmp/coder-home:/home/coder cfg-server-codeserver:local
 
-ARG CODE_SERVER_VERSION=4.134.0
+ARG CODE_SERVER_VERSION=4.135.0
 
 FROM codercom/code-server:${CODE_SERVER_VERSION}
 
