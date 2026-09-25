@@ -91,15 +91,94 @@ jobs:
             type=sha,prefix=main-,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
+      # PR builds also LOAD the image into the runner's daemon under a fixed
+      # local tag, for the smoke test below. The metadata tags are empty on
+      # pull_request (no branch/tag ref matches), and the buildx container
+      # driver keeps the result in its own cache unless `load` is true. Push
+      # builds get neither: `load` is false and the extra tags line renders
+      # empty, which the action drops.
       - name: Build + push
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ github.event_name == 'pull_request' && 'cfg-server-codeserver:smoke' || '' }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             CODE_SERVER_VERSION=${{ steps.version.outputs.code_server }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Boot the PR's image the way the platform does and check the contract
+      # it depends on, so a broken Dockerfile or an upstream bump (the fleet's
+      # chore/upstream-bump PRs land here too) fails CI instead of prod.
+      # PR-only: push builds do not load the image. Stays on ubuntu-latest —
+      # never a self-hosted runner on a public repo.
+      - name: Smoke test (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          # An EMPTY home owned by the container's uid, like prod's fresh
+          # bind-mounted installation data dir. It shadows the image's own
+          # /home/coder, so this also exercises the entrypoint's seeding.
+          home="$RUNNER_TEMP/coder-home"
+          mkdir -p "$home"
+          sudo chown 1000:1000 "$home"
+
+          # HASHED_PASSWORD, not PASSWORD: it is what the launcher injects.
+          docker run -d --name smoke -e HASHED_PASSWORD=smoketoken \
+            -v "$home:/home/coder" -p 8080:8080 cfg-server-codeserver:smoke
+
+          # /healthz is unauthenticated; the image's HEALTHCHECK and the
+          # platform's status path both depend on it answering.
+          ok=
+          for _ in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8080/healthz; then ok=1; break; fi
+            sleep 2
+          done
+          [ -n "$ok" ] || { echo "::error::/healthz never answered within ~90s"; exit 1; }
+          echo
+
+          # The cs#350 cookie contract. code-server accepts the HASHED_PASSWORD
+          # hex verbatim as its session cookie (upstream's SHA256 path, which it
+          # labels "legacy"); core-server's proxy injects exactly that cookie so
+          # the owner never sees a login form. An upstream bump that drops the
+          # path must fail HERE, not as a login wall in prod.
+          #
+          # Bare /vscode/ is a 302 even when signed in: the entrypoint passes
+          # ~/projects on the CLI, so code-server redirects to ?folder=. So the
+          # bare path is checked for "not sent to /login", and the 200 is
+          # checked on the folder URL it redirects to.
+          vscode=http://127.0.0.1:8080/vscode/
+          folder="$vscode?folder=/home/coder/projects"
+          good='Cookie: code-server-session=smoketoken'
+          bad='Cookie: code-server-session=wrong'
+          loc=$(curl -s -o /dev/null -w '%{redirect_url}' -H "$good" "$vscode")
+          case "$loc" in
+            */login*) echo "::error::right cookie on /vscode/ was sent to login ($loc)"; exit 1 ;;
+          esac
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "$good" "$folder")
+          [ "$code" = 200 ] || { echo "::error::right cookie on /vscode/?folder= gave $code, want 200"; exit 1; }
+          # Negative control: without it, the 200 above could mean auth is off.
+          resp=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -H "$bad" "$folder")
+          case "$resp" in
+            "302 "*/login*) ;;
+            *) echo "::error::wrong cookie gave '$resp', want a 302 to /login"; exit 1 ;;
+          esac
+
+          # The dev toolchain the box promises (README "What is on the box").
+          docker exec smoke sh -c 'node --version | grep -q "^v24\." && node --version && gh --version && jq --version'
+
+          # The entrypoint seeded the empty home: default settings and the
+          # workspace dir code-server opens on.
+          test -f "$home/.local/share/code-server/User/settings.json" \
+            || { echo "::error::entrypoint did not seed settings.json"; exit 1; }
+          test -d "$home/projects" || { echo "::error::entrypoint did not create ~/projects"; exit 1; }
+
+      - name: Smoke test logs
+        if: failure() && github.event_name == 'pull_request'
+        run: docker logs smoke || true

@@ -7,12 +7,18 @@
 # minimal bits code-server expects, then exec code-server (dumb-init is PID 1
 # above us and forwards SIGTERM).
 #
-# Env knobs (set by core-server's launcher; defaults suit standalone runs):
-#   PASSWORD            — password auth for code-server (blank ⇒ auth stays
-#                         on; code-server generates one into its config —
-#                         standalone `docker run` users read it from the log.
-#                         The platform ALWAYS sets it.)
-#   CODESERVER_APP_NAME — login-page branding (default: CFG code-server)
+# Env knobs (defaults suit standalone runs). code-server reads the auth ones
+# from its own environment, so this script never touches them:
+#   HASHED_PASSWORD     — what the platform ALWAYS sets: sha256 hex of the
+#                         per-install derived secret. code-server accepts that
+#                         hex verbatim as its session cookie, which core-server's
+#                         proxy injects so the owner types nothing (cs#350).
+#   PASSWORD            — plain-text password for standalone runs (both blank
+#                         ⇒ auth stays on; code-server generates one into its
+#                         config and standalone `docker run` users read it from
+#                         ~/.config/code-server/config.yaml).
+#   CODESERVER_APP_NAME — login-page branding; an image default (CFG
+#                         code-server), the launcher does not set it
 
 set -euo pipefail
 
