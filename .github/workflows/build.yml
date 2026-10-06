@@ -6,8 +6,8 @@ name: Build + publish image
 #
 # ⚠️ `:latest` MOVES ONLY ON A `v*` TAG (2026-08-06). It is what core-server's
 # kind-image.ts pulls with `imagePull: always` for EVERY user container launch,
-# so while it tracked `main` a promotion shipped straight to users with no
-# release decision in between. Cutting a tag is that decision. `:main-<sha>`
+# so tracking `main` would ship a promotion straight to users with no release
+# decision in between. Cutting a tag is that decision. `:main-<sha>`
 # stays as the inspection and rollback handle.
 #
 # linux/amd64 only — the fleet host is amd64; code-server publishes arm64
@@ -56,14 +56,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ⛔ THE DOCKERFILE ARG IS THE ONLY HOME FOR THIS VERSION. This step used to
-      # be a literal `|| '4.131.0'` fallback inline in build-args, which silently
-      # OVERRODE the Dockerfile on every non-dispatch build — tag builds included.
-      # It drifted exactly as you would expect: the Dockerfile went to 4.133.0 via
-      # the upstream-watch bump (which cannot edit workflows — the fleet App has no
-      # `workflows` permission) while this file still forced 4.131.0, so `:latest`
-      # shipped 4.131.0 under a LABEL claiming 4.133.0, and nothing went red.
-      # Reading the pin instead of restating it makes that class impossible.
+      # ⛔ THE DOCKERFILE ARG IS THE ONLY HOME FOR THIS VERSION. A literal fallback
+      # restated here (e.g. `|| '<version>'` inline in build-args) would silently
+      # OVERRIDE the Dockerfile on every non-dispatch build — tag builds included —
+      # and drift: upstream-watch bumps only the Dockerfile (the fleet App has no
+      # `workflows` permission), so `:latest` would ship one version under a LABEL
+      # claiming another, and nothing would go red. Reading the pin instead of
+      # restating it makes that class impossible.
       - name: Resolve code-server version
         id: version
         run: |
