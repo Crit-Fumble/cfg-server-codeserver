@@ -6,8 +6,7 @@
 # The platform provisions ONE container per UserAppInstallation through the
 # Server Manager kind registry (kinds/codeserver.ts → services/codeserver/
 # launch.ts), CT-metered like every other kind: per 10-minute interval while
-# it runs, plus a final remainder at stop. Alpha-gated (admin-only) at launch;
-# Dev+ users later.
+# it runs, plus a final remainder at stop. Alpha-gated (admin-only).
 #
 # Everything the user owns lives under /home/coder — the platform bind-mounts
 # the installation's data dir there, so extensions, settings
@@ -19,14 +18,14 @@
 # own `gh auth login` is how git and GitHub Packages get a credential — the
 # platform never holds a GitHub token), and jq.
 #
-# Auth: the platform derives a per-install secret (HMAC over the core secret —
-# never stored) and injects its sha256 hex as HASHED_PASSWORD. code-server's
+# Auth: the platform mints a fresh random value at every launch (32 bytes as
+# hex, never stored) and injects it as HASHED_PASSWORD. code-server's
 # `--auth password` gate then accepts exactly that hex string as its
 # `code-server-session` cookie, and core-server's pin-cookie proxy injects that
-# cookie on every request, so the owner types nothing (cs#350). The derived
-# secret itself still works on the login form as break-glass. PASSWORD (plain
-# text) still works for standalone runs. The proxy is the outer wall — the
-# container is never published to the internet directly.
+# cookie on every request, so the owner types nothing (cs#350). No password
+# typed into the login form matches it. PASSWORD (plain text) still works for
+# standalone runs. The proxy is the outer wall — the container is never
+# published to the internet directly.
 #
 # Build:
 #   docker build -t cfg-server-codeserver:local .
@@ -48,10 +47,10 @@ LABEL org.opencontainers.image.title="cfg-server-codeserver" \
 
 # ⚠️ `org.opencontainers.image.version` above does NOT survive to the published
 # image: docker/metadata-action emits its own OCI label set and `--label`
-# last-wins, so the release workflow overwrites it with the git tag (v0.1.0).
-# Auditing "what upstream is in here?" via the OCI label therefore reads back
-# OUR tag. The cfg.* namespace survives because the metadata action never emits
-# it. Verified against the published :latest on 2026-08-08.
+# last-wins, so the release workflow overwrites it with the git tag (e.g.
+# v0.1.0). Auditing "what upstream is in here?" via the OCI label therefore reads
+# back OUR tag. The cfg.* namespace survives because the metadata action never
+# emits it.
 LABEL cfg.upstream.version="${CODE_SERVER_VERSION}"
 
 # The upstream image runs as `coder` (uid 1000) with dumb-init as PID 1 and
@@ -64,8 +63,8 @@ LABEL cfg.upstream.version="${CODE_SERVER_VERSION}"
 #     `gpg --dearmor`. Never vendor it — NodeSource re-issued it under the same
 #     fingerprint to fix a SHA1 rejection, so a stale copy fails on trixie.
 #   - The gh keyring is checked against a pinned sha256 (taken from a fresh
-#     download, 2026-09-25). If cli.github.com rotates it, this build fails
-#     loudly — re-download, verify, and update the hash.
+#     download). If cli.github.com rotates it, this build fails loudly —
+#     re-download, verify, and update the hash.
 #   - gh's suite is `stable`, not `$(lsb_release -cs)`: there is no trixie suite
 #     (it 404s).
 #   - NodeSource's nodejs hard-depends on python3 (for node-gyp), so python3
@@ -106,9 +105,9 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
 EXPOSE 8080/tcp
 
 # Env knobs (defaults suit standalone runs):
-#   HASHED_PASSWORD       — what the platform sets: sha256 hex of the
-#                           per-install derived secret, which code-server
-#                           accepts verbatim as its session cookie (cs#350)
+#   HASHED_PASSWORD       — what the platform sets: a fresh random hex value
+#                           per launch, which code-server accepts verbatim
+#                           as its session cookie (cs#350)
 #   PASSWORD              — plain-text password for standalone runs
 #   CODESERVER_APP_NAME   — branding shown on the login page; an image default
 #                           only, the launcher does not set it

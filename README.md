@@ -20,12 +20,13 @@ This repo is a thin container around upstream code-server — a `Dockerfile`, an
 | Auth (standalone) | `PASSWORD` env — a plain-text password typed into code-server's login form |
 | Shutdown | SIGTERM via dumb-init (upstream PID 1) |
 
-On the platform, the launcher derives a per-install secret (HMAC over the core
-secret, never stored) and injects its sha256 hex as `HASHED_PASSWORD`.
-code-server accepts that hex string verbatim as its `code-server-session`
-cookie, and the platform's proxy adds the cookie to every request, so the owner
-never sees a login form. The derived secret still works on the login form as a
-fallback.
+On the platform, the launcher mints a fresh random value (32 bytes as hex) at
+every launch and injects it as `HASHED_PASSWORD`; nothing stores it, and a stop
+and start replaces it. code-server accepts that hex string verbatim as its
+`code-server-session` cookie, and the platform's proxy reads it back from the
+container's env and adds the cookie to every request, so the owner never sees a
+login form. No password typed into the login form matches it — the injected
+cookie is the only way in.
 
 That cookie behavior is code-server's SHA256 path, which upstream labels
 "legacy". The PR build smoke-tests it, so an upstream bump that drops it fails
@@ -76,8 +77,12 @@ except for these paths, which it leaves out of its storage backup:
 - `.npmrc` and `.git-credentials`, anywhere
 - `~/.npm` and `~/.cache`
 - `node_modules`, at any depth
+- `~/.ssh`, `~/.netrc`, `~/.aws`, `~/.config/gcloud`, `~/.docker/config.json`,
+  `~/.kube`, `~/.config/github-copilot`, `~/.claude/` and `~/.claude.json`, at
+  the home root only: a project's own `.ssh/` or `.claude/` is still backed up
 
-After a restore, run `gh auth login`, `gh auth setup-git` and `npm ci` again.
+After a restore, run `gh auth login`, `gh auth setup-git` and `npm ci` again,
+and put back any SSH keys or other CLI sign-ins yourself.
 
 Shell history *is* backed up. Never paste a raw token into the shell.
 
@@ -107,8 +112,7 @@ by it (`sudo chown 1000:1000 /tmp/coder-home`).
 ## Gating
 
 Alpha: admin-only (the kind is hidden from the Create Server picker and the
-installation POST rejects non-admins). Dev+ users come later, behind the
-GitHub-App credential story — see dt#204 for the ladder.
+installation POST rejects non-admins).
 
 ## License
 

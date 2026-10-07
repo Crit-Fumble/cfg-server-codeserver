@@ -9,9 +9,9 @@
 #
 # Env knobs (defaults suit standalone runs). code-server reads the auth ones
 # from its own environment, so this script never touches them:
-#   HASHED_PASSWORD     — what the platform ALWAYS sets: sha256 hex of the
-#                         per-install derived secret. code-server accepts that
-#                         hex verbatim as its session cookie, which core-server's
+#   HASHED_PASSWORD     — what the platform ALWAYS sets: a fresh random hex
+#                         value per launch. code-server accepts that hex
+#                         verbatim as its session cookie, which core-server's
 #                         proxy injects so the owner types nothing (cs#350).
 #   PASSWORD            — plain-text password for standalone runs (both blank
 #                         ⇒ auth stays on; code-server generates one into its

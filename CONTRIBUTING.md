@@ -11,18 +11,20 @@ suite; **Docker is the only prerequisite**.
 2. Smoke it: `docker run --rm -p 8080:8080 -e PASSWORD=dev cfg-server-codeserver:local`
    then open http://localhost:8080 and sign in.
 3. Verify health flips to `healthy`: `docker inspect --format '{{.State.Health.Status}}' <id>`
-4. PR against `next` — the release-candidate branch. A merge to `next` publishes
-   `ghcr.io/crit-fumble/cfg-server-codeserver:latest`.
+4. PR against `next` — the release-candidate branch. A push to `next` publishes
+   `:next`; `:latest`, which the platform pulls by default, moves only on a `v*` tag.
 
 ## Version bumps
 
-Upstream version is pinned by `ARG CODE_SERVER_VERSION` (Dockerfile) and the
-default in `.github/workflows/build.yml` — bump BOTH in one commit. Pinning
-means no auto-update: someone must actually do this on upstream releases.
+The upstream version lives only in `ARG CODE_SERVER_VERSION` in the Dockerfile —
+build.yml reads it from there, so never restate it in the workflow. dev-tools'
+upstream-watch opens a bump PR into `next` when upstream releases.
 
 ## Conventions
 
-- Keep the image thin: user tooling belongs in the user's `/home/coder`, not
-  baked into the image.
-- No secrets in the image or the repo — auth arrives as `PASSWORD` env from
-  the platform launcher at container start.
+- Keep the image thin: beyond upstream code-server it adds only Node 24, `gh`
+  and `jq` (see the README's "What is on the box"); anything else a user wants
+  belongs in their `/home/coder`.
+- No secrets in the image or the repo — on the platform, auth arrives at
+  container start as a `HASHED_PASSWORD` env value the launcher mints fresh per
+  launch; `PASSWORD` is for standalone runs only.
