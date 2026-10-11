@@ -71,6 +71,10 @@ LABEL cfg.upstream.version="${CODE_SERVER_VERSION}"
 #     comes along and adds to the image size.
 #   - The trailing version checks make a wrong Node major (e.g. a NodeSource
 #     repo change) fail the build instead of shipping.
+#   - libnss-wrapper is what gives a uid with no passwd entry a name at run
+#     time (see entrypoint.sh). The upstream image does that with fixuid, a
+#     setuid helper: it never runs here, since this image replaces upstream's
+#     entrypoint, and it could not under no-new-privileges.
 USER root
 RUN set -eux; \
     install -d -m 0755 /etc/apt/keyrings; \
@@ -86,7 +90,7 @@ RUN set -eux; \
     echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
       > /etc/apt/sources.list.d/github-cli.list; \
     apt-get update; \
-    apt-get install -y --no-install-recommends nodejs gh jq; \
+    apt-get install -y --no-install-recommends nodejs gh jq libnss-wrapper; \
     rm -rf /var/lib/apt/lists/*; \
     node --version | grep -q '^v24\.'; \
     gh --version
@@ -94,6 +98,9 @@ RUN set -eux; \
 COPY entrypoint.sh /usr/local/bin/cfg-entrypoint.sh
 RUN chmod +x /usr/local/bin/cfg-entrypoint.sh
 USER coder
+# Docker takes HOME from /etc/passwd, and a uid given with `--user` has no
+# entry there: HOME would be `/`, and the entrypoint's first mkdir would fail.
+ENV HOME=/home/coder
 
 # code-server's own liveness endpoint — unauthenticated by design. The
 # platform's status/proxy paths gate on docker health being `healthy`, so a

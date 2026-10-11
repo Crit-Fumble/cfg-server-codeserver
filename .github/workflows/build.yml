@@ -178,6 +178,47 @@ jobs:
             || { echo "::error::entrypoint did not seed settings.json"; exit 1; }
           test -d "$home/projects" || { echo "::error::entrypoint did not create ~/projects"; exit 1; }
 
+      # The platform starts each member's server as that member's own uid, which
+      # has no passwd entry in the image, with every capability dropped. HOME and
+      # the entrypoint's nss_wrapper block are what keep that working: without
+      # them the first mkdir fails, and ssh refuses to run for a nameless uid.
+      - name: Smoke test as an arbitrary uid (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          home="$RUNNER_TEMP/coder-home-anyuid"
+          mkdir -p "$home"
+          sudo chown 61000:61000 "$home"
+          sudo chmod 0700 "$home"
+
+          docker run -d --name smoke-anyuid --user 61000:61000 \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -e HASHED_PASSWORD=smoketoken -v "$home:/home/coder" -p 8081:8080 cfg-server-codeserver:smoke
+
+          ok=
+          for _ in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8081/healthz; then ok=1; break; fi
+            sleep 2
+          done
+          [ -n "$ok" ] || { echo "::error::/healthz never answered as uid 61000"; exit 1; }
+          echo
+
+          # A workbench terminal inherits code-server's own environment, which a
+          # bare `docker exec` does not: load it before asking who we are.
+          docker exec smoke-anyuid bash -c '
+            pid=$(pgrep -o -f code-server | head -1)
+            eval "$(tr "\0" "\n" < /proc/$pid/environ | grep -E "^(LD_PRELOAD|NSS_WRAPPER_PASSWD|NSS_WRAPPER_GROUP)=" | sed "s/^/export /")"
+            [ "$(whoami)" = coder ] || { echo "::error::uid 61000 is not named coder"; exit 1; }
+            out=$(ssh -o BatchMode=yes -o ConnectTimeout=2 git@127.0.0.1 true 2>&1 || true)
+            case "$out" in
+              *"No user exists"*) echo "::error::ssh refuses uid 61000: $out"; exit 1 ;;
+            esac
+          '
+          sudo test -f "$home/.local/share/code-server/User/settings.json" \
+            || { echo "::error::entrypoint did not seed settings.json as uid 61000"; exit 1; }
+
       - name: Smoke test logs
         if: failure() && github.event_name == 'pull_request'
-        run: docker logs smoke || true
+        run: |
+          docker logs smoke || true
+          docker logs smoke-anyuid || true

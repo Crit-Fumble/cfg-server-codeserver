@@ -22,6 +22,21 @@
 
 set -euo pipefail
 
+# A uid with no passwd entry (`docker run --user`, or the platform starting each
+# member's server as that member's own uid) is not cosmetic: ssh refuses to run
+# ("No user exists for uid"), which kills git over ssh, and whoami and Node's
+# os.userInfo() fail. nss_wrapper answers those lookups from a copy of
+# /etc/passwd in which `coder` carries this uid; /etc/passwd itself stays
+# read-only. Every terminal the workbench opens inherits the three variables.
+if ! getent passwd "$(id -u)" > /dev/null; then
+  nss_dir="$(mktemp -d)"
+  sed "s/^coder:x:[0-9]*:[0-9]*:/coder:x:$(id -u):$(id -g):/" /etc/passwd > "$nss_dir/passwd"
+  cp /etc/group "$nss_dir/group"
+  getent group "$(id -g)" > /dev/null || sed -i "s/^coder:x:[0-9]*:/coder:x:$(id -g):/" "$nss_dir/group"
+  export NSS_WRAPPER_PASSWD="$nss_dir/passwd" NSS_WRAPPER_GROUP="$nss_dir/group"
+  export LD_PRELOAD="libnss_wrapper.so${LD_PRELOAD:+:$LD_PRELOAD}"
+fi
+
 # Seed a default user settings file once — dark theme, telemetry off. Never
 # overwrite: after first boot this file belongs to the user.
 SETTINGS_DIR="$HOME/.local/share/code-server/User"
