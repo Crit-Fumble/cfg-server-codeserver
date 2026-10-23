@@ -71,6 +71,14 @@ LABEL cfg.upstream.version="${CODE_SERVER_VERSION}"
 #     comes along and adds to the image size.
 #   - The trailing version checks make a wrong Node major (e.g. a NodeSource
 #     repo change) fail the build instead of shipping.
+#   - code-server's own Node (`lib/node`: the server, the extension host and
+#     everything they start) becomes a link to the NodeSource one, so its TLS
+#     root store is the one this layer installs, not the one upstream bundled.
+#     NODE_OPTIONS cannot do it: VS Code removes that from the extension host
+#     the same way it removes LD_PRELOAD. The ABI check fails the build if
+#     upstream moves to a Node whose native modules would not load on ours.
+#   - ca-certificates is upgraded at build time, so git, curl and gh verify
+#     against the Debian bundle of that build rather than the base image's.
 #   - /etc/passwd and /etc/group are writable by every uid so the entrypoint
 #     can give a uid with no entry the name `coder` (see entrypoint.sh). An
 #     entry in the files reaches every process; an LD_PRELOAD shim does not,
@@ -96,9 +104,11 @@ RUN set -eux; \
     echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
       > /etc/apt/sources.list.d/github-cli.list; \
     apt-get update; \
-    apt-get install -y --no-install-recommends nodejs gh jq; \
+    apt-get install -y --no-install-recommends nodejs gh jq ca-certificates; \
     rm -rf /var/lib/apt/lists/*; \
     node --version | grep -q '^v24\.'; \
+    test "$(/usr/lib/code-server/lib/node -p process.versions.modules)" = "$(node -p process.versions.modules)"; \
+    ln -sf /usr/bin/node /usr/lib/code-server/lib/node; \
     gh --version; \
     chmod 0666 /etc/passwd /etc/group
 

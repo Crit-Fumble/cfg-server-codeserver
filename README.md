@@ -35,7 +35,8 @@ CI here rather than in production.
 ## What is on the box
 
 - code-server at the version pinned by `ARG CODE_SERVER_VERSION` in the `Dockerfile`
-- Node.js 24 (from NodeSource) with npm, plus the python3 it depends on for native addons
+- Node.js 24 (from NodeSource) with npm, plus the python3 it depends on for native addons;
+  code-server itself runs on this Node, not the one upstream bundles
 - GitHub CLI `gh` (from cli.github.com)
 - `jq`
 - From the upstream image: `git`, `git-lfs`, `curl`, `zsh`, and passwordless `sudo` for the `coder` user
