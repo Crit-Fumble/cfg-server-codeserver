@@ -109,7 +109,10 @@ docker rm -f cs-local
 On Linux the container runs as uid 1000, so `/tmp/coder-home` must be writable
 by it (`sudo chown 1000:1000 /tmp/coder-home`). Or run it as your own user with
 `--user "$(id -u):$(id -g)"`: the entrypoint gives any uid the name `coder`, so
-ssh, git and `whoami` work the same.
+ssh, git and `whoami` work the same. That uid also gets coder's passwordless
+`sudo`, and `/etc/passwd` is writable by it. Add
+`--cap-drop ALL --security-opt no-new-privileges:true`, as CFG hosting does, to
+keep it unprivileged.
 
 ## Gating
 

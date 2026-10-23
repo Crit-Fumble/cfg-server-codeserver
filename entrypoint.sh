@@ -25,16 +25,21 @@ set -euo pipefail
 # A uid with no passwd entry (`docker run --user`, or the platform starting each
 # member's server as that member's own uid) is not cosmetic: ssh refuses to run
 # ("No user exists for uid"), which kills git over ssh, and whoami and Node's
-# os.userInfo() fail. nss_wrapper answers those lookups from a copy of
-# /etc/passwd in which `coder` carries this uid; /etc/passwd itself stays
-# read-only. Every terminal the workbench opens inherits the three variables.
+# os.userInfo() fail. So `coder` takes this uid in /etc/passwd itself (the
+# image leaves it writable), which every process reads whatever its
+# environment: VS Code strips LD_PRELOAD from its extension host, so a preload
+# shim never reached git in the Source Control panel (#21). Each file is read
+# whole before it is rewritten, in place, since /etc is not writable. A
+# restarted container keeps its entry and skips this. On a read-only root
+# filesystem the uid stays nameless and code-server still starts.
 if ! getent passwd "$(id -u)" > /dev/null; then
-  nss_dir="$(mktemp -d)"
-  sed "s/^coder:x:[0-9]*:[0-9]*:/coder:x:$(id -u):$(id -g):/" /etc/passwd > "$nss_dir/passwd"
-  cp /etc/group "$nss_dir/group"
-  getent group "$(id -g)" > /dev/null || sed -i "s/^coder:x:[0-9]*:/coder:x:$(id -g):/" "$nss_dir/group"
-  export NSS_WRAPPER_PASSWD="$nss_dir/passwd" NSS_WRAPPER_GROUP="$nss_dir/group"
-  export LD_PRELOAD="libnss_wrapper.so${LD_PRELOAD:+:$LD_PRELOAD}"
+  passwd="$(sed "s/^coder:x:[0-9]*:[0-9]*:/coder:x:$(id -u):$(id -g):/" /etc/passwd)"
+  printf '%s\n' "$passwd" > /etc/passwd \
+    || echo "cfg-entrypoint: cannot write /etc/passwd; uid $(id -u) has no name, so ssh will refuse it" >&2
+  if ! getent group "$(id -g)" > /dev/null; then
+    group="$(sed "s/^coder:x:[0-9]*:/coder:x:$(id -g):/" /etc/group)"
+    printf '%s\n' "$group" > /etc/group || true
+  fi
 fi
 
 # Seed a default user settings file once — dark theme, telemetry off. Never
