@@ -22,9 +22,9 @@ upstream-watch opens a bump PR into `next` when upstream releases.
 
 ## Conventions
 
-- Keep the image thin: beyond upstream code-server it adds only Node 24, `gh`
-  and `jq` (see the README's "What is on the box"); anything else a user wants
-  belongs in their `/home/coder`.
+- Keep the image thin: beyond upstream code-server it adds only Node 24 (which
+  code-server also runs on), `gh` and `jq` (see the README's "What is on the
+  box"); anything else a user wants belongs in their `/home/coder`.
 - No secrets in the image or the repo — on the platform, auth arrives at
   container start as a `HASHED_PASSWORD` env value the launcher mints fresh per
   launch; `PASSWORD` is for standalone runs only.
