@@ -180,7 +180,7 @@ jobs:
 
       # The platform starts each member's server as that member's own uid, which
       # has no passwd entry in the image, with every capability dropped. HOME and
-      # the entrypoint's nss_wrapper block are what keep that working: without
+      # the entrypoint's passwd entry are what keep that working: without
       # them the first mkdir fails, and ssh refuses to run for a nameless uid.
       - name: Smoke test as an arbitrary uid (PR only)
         if: github.event_name == 'pull_request'
@@ -203,12 +203,13 @@ jobs:
           [ -n "$ok" ] || { echo "::error::/healthz never answered as uid 61000"; exit 1; }
           echo
 
-          # A workbench terminal inherits code-server's own environment, which a
-          # bare `docker exec` does not: load it before asking who we are.
-          docker exec smoke-anyuid bash -c '
-            pid=$(pgrep -o -f code-server | head -1)
-            eval "$(tr "\0" "\n" < /proc/$pid/environ | grep -E "^(LD_PRELOAD|NSS_WRAPPER_PASSWD|NSS_WRAPPER_GROUP)=" | sed "s/^/export /")"
+          # An EMPTY environment, so the name cannot come from anything a
+          # process inherits: VS Code strips LD_PRELOAD from its extension host,
+          # where git runs for the Source Control panel (#21).
+          docker exec smoke-anyuid env -i PATH=/usr/local/bin:/usr/bin:/bin bash -c '
             [ "$(whoami)" = coder ] || { echo "::error::uid 61000 is not named coder"; exit 1; }
+            node -e "const u = require(\"os\").userInfo(); if (u.username !== \"coder\") process.exit(1)" \
+              || { echo "::error::os.userInfo() does not name uid 61000 coder"; exit 1; }
             out=$(ssh -o BatchMode=yes -o ConnectTimeout=2 git@127.0.0.1 true 2>&1 || true)
             case "$out" in
               *"No user exists"*) echo "::error::ssh refuses uid 61000: $out"; exit 1 ;;
