@@ -39,7 +39,9 @@ CI here rather than in production.
   code-server itself runs on this Node, not the one upstream bundles
 - GitHub CLI `gh` (from cli.github.com)
 - `jq`
-- From the upstream image: `git`, `git-lfs`, `curl`, `zsh`, and passwordless `sudo` for the `coder` user
+- From the upstream image: `git`, `git-lfs`, `curl`, `zsh`, and passwordless `sudo` for the `coder` user.
+  On CFG hosting the container starts as the member's own uid with `no-new-privileges` and every
+  capability dropped, so `sudo` there cannot raise privileges
 
 ## Using GitHub inside the box
 
