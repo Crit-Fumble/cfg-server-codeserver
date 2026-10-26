@@ -16,7 +16,10 @@
 # The box is for developing the CFG repos, so it ships what they need on top
 # of upstream: Node 24 (the repos' engines floor), the GitHub CLI (the user's
 # own `gh auth login` is how git and GitHub Packages get a credential — the
-# platform never holds a GitHub token), and jq.
+# platform never holds a GitHub token), jq, gitleaks (every private CFG repo's
+# pre-commit hook refuses to commit without it) and the system libraries
+# Playwright's Chromium needs. It ships no sudo: nothing a user runs can become
+# root, so anything that needs root has to be in the image.
 #
 # Auth: the platform mints a fresh random value at every launch (32 bytes as
 # hex, never stored) and injects it as HASHED_PASSWORD. code-server's
@@ -38,6 +41,11 @@ ARG CODE_SERVER_VERSION=4.143.1
 FROM codercom/code-server:${CODE_SERVER_VERSION}
 
 ARG CODE_SERVER_VERSION
+# The Playwright whose Chromium dependency list the image installs: the
+# `@playwright/test` cfg-core-dev-tools' e2e suite pins. Bump it with that.
+ARG PLAYWRIGHT_VERSION=1.64.1
+ARG GITLEAKS_VERSION=8.30.1
+ARG GITLEAKS_SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 
 LABEL org.opencontainers.image.title="cfg-server-codeserver" \
       org.opencontainers.image.description="CodeBench — per-user code-server (VS Code in the browser) tool-server kind" \
@@ -85,10 +93,8 @@ LABEL cfg.upstream.version="${CODE_SERVER_VERSION}"
 #     because VS Code removes LD_PRELOAD from the extension host and everything
 #     it starts (#21). The upstream image does this with fixuid, a setuid
 #     helper: it never runs here, since this image replaces upstream's
-#     entrypoint, and it could not under no-new-privileges. A uid named this
-#     way gets coder's passwordless sudo too, and anyone in the container can
-#     edit the files; on CFG hosting neither raises anything, because
-#     no-new-privileges stops every setuid binary.
+#     entrypoint, and it could not under no-new-privileges. Anyone in the
+#     container can edit the files, which names a uid and grants nothing.
 USER root
 RUN set -eux; \
     install -d -m 0755 /etc/apt/keyrings; \
@@ -112,12 +118,44 @@ RUN set -eux; \
     gh --version; \
     chmod 0666 /etc/passwd /etc/group
 
+# The CFG repos' tooling, and the end of root:
+#   - gitleaks is the release binary, checked against a pinned sha256 of the
+#     tarball (from the release's checksums file).
+#   - Chromium's libraries come from Playwright's own list for this OS, at the
+#     repos' Playwright version. The browser itself is not in the image: each
+#     repo's `npx playwright install chromium` puts its matching build in
+#     ~/.cache, which needs no root once these libraries exist.
+#   - sudo is purged (cs#550). Upstream ships it passwordless for `coder`; on
+#     CFG hosting no-new-privileges already made it useless, and the dev
+#     tooling now gets from the image what it used to ask sudo for.
+#   - ~/.local/bin is where a user installs their own tools, and the home
+#     starts with no shell rc to put it on PATH. ENV covers every process;
+#     /etc/profile resets PATH in bash and sh login shells, so profile.d puts it
+#     back there.
+RUN set -eux; \
+    tmp="$(mktemp -d)"; \
+    curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+      -o "$tmp/gitleaks.tar.gz"; \
+    echo "${GITLEAKS_SHA256}  $tmp/gitleaks.tar.gz" | sha256sum -c -; \
+    tar -xzf "$tmp/gitleaks.tar.gz" -C "$tmp" gitleaks; \
+    install -m 0755 "$tmp/gitleaks" /usr/local/bin/gitleaks; \
+    rm -rf "$tmp"; \
+    gitleaks version; \
+    npx -y "playwright@${PLAYWRIGHT_VERSION}" install-deps chromium; \
+    rm -rf /var/lib/apt/lists/* /root/.npm; \
+    apt-get purge -y sudo; \
+    rm -rf /etc/sudoers /etc/sudoers.d; \
+    test -z "$(command -v sudo)"; \
+    printf '%s\n' 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac' \
+      > /etc/profile.d/cfg-local-bin.sh
+
 COPY entrypoint.sh /usr/local/bin/cfg-entrypoint.sh
 RUN chmod +x /usr/local/bin/cfg-entrypoint.sh
 USER coder
 # Docker takes HOME from /etc/passwd, and a uid given with `--user` has no
 # entry there: HOME would be `/`, and the entrypoint's first mkdir would fail.
 ENV HOME=/home/coder
+ENV PATH=/home/coder/.local/bin:${PATH}
 
 # code-server's own liveness endpoint — unauthenticated by design. The
 # platform's status/proxy paths gate on docker health being `healthy`, so a

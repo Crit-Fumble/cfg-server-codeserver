@@ -170,7 +170,35 @@ jobs:
           esac
 
           # The dev toolchain the box promises (README "What is on the box").
-          docker exec smoke sh -c 'node --version | grep -q "^v24\." && node --version && gh --version && jq --version'
+          docker exec smoke sh -c 'node --version | grep -q "^v24\." && node --version && gh --version && jq --version && gitleaks version'
+
+          # No sudo (cs#550), and ~/.local/bin on PATH both for processes and
+          # for a login shell, whose /etc/profile resets PATH.
+          docker exec smoke sh -c 'test -z "$(command -v sudo)"' \
+            || { echo "::error::sudo is still in the image"; exit 1; }
+          for shell in 'sh -c' 'bash -lc'; do
+            docker exec smoke $shell 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) exit 1 ;; esac' \
+              || { echo "::error::~/.local/bin is not on PATH in '$shell'"; exit 1; }
+          done
+
+          # Fonts, from Playwright's dependency list: without one, sharp renders
+          # SVG text as nothing (core-server's watermark tests fail in the box).
+          docker exec smoke sh -c 'ls /usr/share/fonts/truetype/*/*.ttf > /dev/null' \
+            || { echo "::error::the image has no fonts"; exit 1; }
+
+          # Chromium launches with no root: a repo's own `playwright install`
+          # fetches the browser into ~/.cache, and the image holds its libraries.
+          pw=$(sed -nE 's/^ARG PLAYWRIGHT_VERSION=(.*)$/\1/p' Dockerfile)
+          docker exec -e PW="$pw" smoke bash -c '
+            set -euo pipefail
+            mkdir -p /tmp/pw && cd /tmp/pw
+            npm init -y > /dev/null
+            npm install --no-audit --no-fund "playwright@$PW" > /dev/null
+            npx playwright install chromium-headless-shell
+            node -e "require(\"playwright\").chromium.launch().then(async (b) => {
+              const p = await b.newPage(); await p.setContent(\"<h1>ok</h1>\")
+              if (await p.textContent(\"h1\") !== \"ok\") process.exit(1); await b.close() })"
+          ' || { echo "::error::Playwright $pw Chromium did not launch in the box"; exit 1; }
 
           # The entrypoint seeded the empty home: default settings and the
           # workspace dir code-server opens on.
