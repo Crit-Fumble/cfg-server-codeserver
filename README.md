@@ -39,34 +39,47 @@ CI here rather than in production.
   code-server itself runs on this Node, not the one upstream bundles
 - GitHub CLI `gh` (from cli.github.com)
 - `jq`
-- From the upstream image: `git`, `git-lfs`, `curl`, `zsh`, and passwordless `sudo` for the `coder` user.
-  On CFG hosting the container starts as the member's own uid with `no-new-privileges` and every
-  capability dropped, so `sudo` there cannot raise privileges
+- `gitleaks`, which the CFG repos' pre-commit hooks run
+- The system libraries and fonts Playwright's Chromium needs (the fonts also let image tools
+  such as sharp render text). The browser itself is per repo: its `npx playwright install chromium`
+  puts it in `~/.cache`
+- From the upstream image: `git`, `git-lfs`, `curl` and `zsh`
+
+There is **no `sudo`** and no way to become root, so `apt-get` does not work. Install your own tools
+into `~/.local/bin`, which is on `PATH`. The box has no Docker either.
 
 ## Using GitHub inside the box
 
-The platform never holds a GitHub token. You sign in as yourself, inside the
-box, from the built-in terminal:
+The platform never holds a GitHub token. You sign in yourself, inside the box,
+from the built-in terminal. Everything the box runs (extensions, `npm install`
+scripts, tools) can read what it holds, so give it the narrowest tokens that do
+the job, two of them:
+
+- **For git and pull requests**, a fine-grained personal access token with
+  Contents and Pull requests read/write and Metadata read, on the repos you
+  work on. Leave Actions, Workflows and Administration off.
+- **For npm packages on GitHub Packages**, which accepts only classic tokens, a
+  classic token with `read:packages` and nothing else.
 
 ```bash
 git config --global user.name "Your Name"
 git config --global user.email "<id>+<username>@users.noreply.github.com"
 
-# Device flow: prints a one-time code; open the URL in your own browser.
-gh auth login --hostname github.com --git-protocol https --web --scopes read:packages,workflow
+# Choose "Paste an authentication token" and paste the fine-grained token at its prompt.
+gh auth login --hostname github.com --git-protocol https
 # Makes git use gh's token for https://github.com (safe to re-run).
 gh auth setup-git
 
-# Install dependencies from GitHub Packages without writing the token to disk.
-env "npm_config_//npm.pkg.github.com/:_authToken=$(gh auth token)" npm ci
+# Open ~/.npmrc in the editor and add the classic token on this line:
+#   //npm.pkg.github.com/:_authToken=<classic token>
+npm ci
 ```
 
-Never run `npm config set //npm.pkg.github.com/:_authToken=...`: it writes the
-token in plain text to `~/.npmrc`.
-
-The box has no system keyring, so `gh` keeps its token in plain text in
-`~/.config/gh/hosts.yml` and prints a warning saying so. That is expected here.
-`gh auth logout` removes it.
+Paste a token only at a tool's own prompt or into a file in the editor, never
+on the command line: shell history is backed up. `~/.npmrc` and gh's token
+file are not (below). The box has no system keyring, so `gh` keeps its token
+in plain text in `~/.config/gh/hosts.yml` and prints a warning saying so; that
+is expected here. `gh auth logout` removes it.
 
 VS Code's own GitHub sign-in (the Accounts menu) is optional. `git push` from
 the terminal or the Source Control view uses `gh`'s credential helper.
@@ -84,10 +97,9 @@ except for these paths, which it leaves out of its storage backup:
   `~/.kube`, `~/.config/github-copilot`, `~/.claude/` and `~/.claude.json`, at
   the home root only: a project's own `.ssh/` or `.claude/` is still backed up
 
-After a restore, run `gh auth login`, `gh auth setup-git` and `npm ci` again,
-and put back any SSH keys or other CLI sign-ins yourself.
-
-Shell history *is* backed up. Never paste a raw token into the shell.
+After a restore, run `gh auth login` and `gh auth setup-git` again, put the
+`~/.npmrc` line back, and run `npm ci`; put back any SSH keys or other CLI
+sign-ins yourself.
 
 ## Local test
 
@@ -112,10 +124,9 @@ docker rm -f cs-local
 On Linux the container runs as uid 1000, so `/tmp/coder-home` must be writable
 by it (`sudo chown 1000:1000 /tmp/coder-home`). Or run it as your own user with
 `--user "$(id -u):$(id -g)"`: the entrypoint gives any uid the name `coder`, so
-ssh, git and `whoami` work the same. That uid also gets coder's passwordless
-`sudo`, and `/etc/passwd` is writable by it. Add
-`--cap-drop ALL --security-opt no-new-privileges:true`, as CFG hosting does, to
-keep it unprivileged.
+ssh, git and `whoami` work the same. Add
+`--cap-drop ALL --security-opt no-new-privileges:true` to run it as CFG hosting
+does.
 
 ## Gating
 

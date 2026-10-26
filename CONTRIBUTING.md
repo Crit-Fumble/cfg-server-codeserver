@@ -23,8 +23,15 @@ upstream-watch opens a bump PR into `next` when upstream releases.
 ## Conventions
 
 - Keep the image thin: beyond upstream code-server it adds only Node 24 (which
-  code-server also runs on), `gh` and `jq` (see the README's "What is on the
-  box"); anything else a user wants belongs in their `/home/coder`.
+  code-server also runs on), `gh`, `jq`, `gitleaks` and Chromium's system
+  libraries, and it removes `sudo` (see the README's "What is on the box").
+  Anything else a user wants belongs in their `/home/coder`; the image is only
+  for what needs root to install, or what the CFG repos' hooks cannot run
+  without.
+- `PLAYWRIGHT_VERSION` follows the `@playwright/test` in cfg-core-dev-tools'
+  `dev/e2e-tests/package.json`, and
+  `GITLEAKS_VERSION` moves with its `GITLEAKS_SHA256`, taken from that
+  release's checksums file.
 - No secrets in the image or the repo — on the platform, auth arrives at
   container start as a `HASHED_PASSWORD` env value the launcher mints fresh per
   launch; `PASSWORD` is for standalone runs only.
