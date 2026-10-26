@@ -91,10 +91,10 @@ LABEL cfg.upstream.version="${CODE_SERVER_VERSION}"
 #     can give a uid with no entry the name `coder` (see entrypoint.sh). An
 #     entry in the files reaches every process; an LD_PRELOAD shim does not,
 #     because VS Code removes LD_PRELOAD from the extension host and everything
-#     it starts (#21). The upstream image does this with fixuid, a setuid
-#     helper: it never runs here, since this image replaces upstream's
-#     entrypoint, and it could not under no-new-privileges. Anyone in the
-#     container can edit the files, which names a uid and grants nothing.
+#     it starts (#21). The upstream image does this with fixuid, a setuid-root
+#     helper, which this image deletes (below): it never ran here, since this
+#     image replaces upstream's entrypoint. Anyone in the container can edit
+#     the files, which names a uid and grants nothing.
 USER root
 RUN set -eux; \
     install -d -m 0755 /etc/apt/keyrings; \
@@ -130,6 +130,11 @@ RUN set -eux; \
 #     tooling now gets from the image what it used to ask sudo for. Its prerm
 #     refuses removal on an image with no root password unless
 #     SUDO_FORCE_REMOVE=yes: the lockout it guards against is the point here.
+#   - No other way back to root either, even in a standalone `docker run`
+#     without no-new-privileges: fixuid goes, and every setuid and setgid bit
+#     is cleared (su, passwd, mount, chage, unix_chkpwd, …), none of which the
+#     box uses. ssh-agent keeps its setgid, which only stops other processes
+#     of the same uid from reading the agent's keys.
 #   - ~/.local/bin is where a user installs their own tools, and the home
 #     starts with no shell rc to put it on PATH. ENV covers every process;
 #     /etc/profile resets PATH in bash and sh login shells, so profile.d puts it
@@ -148,6 +153,9 @@ RUN set -eux; \
     SUDO_FORCE_REMOVE=yes apt-get purge -y sudo; \
     rm -rf /etc/sudoers /etc/sudoers.d; \
     test -z "$(command -v sudo)"; \
+    rm -rf /usr/local/bin/fixuid /etc/fixuid; \
+    find / -xdev -type f -perm /6000 ! -path /usr/bin/ssh-agent -exec chmod ug-s {} +; \
+    test -z "$(find / -xdev -type f -perm /6000 ! -path /usr/bin/ssh-agent)"; \
     printf '%s\n' 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac' \
       > /etc/profile.d/cfg-local-bin.sh
 
