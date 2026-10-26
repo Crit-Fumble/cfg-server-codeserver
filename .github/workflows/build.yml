@@ -176,6 +176,9 @@ jobs:
           # for a login shell, whose /etc/profile resets PATH.
           docker exec smoke sh -c 'test -z "$(command -v sudo)"' \
             || { echo "::error::sudo is still in the image"; exit 1; }
+          # Nor any other setuid or setgid file but ssh-agent's (fixuid, su, …).
+          left=$(docker exec smoke sh -c 'find / -xdev -type f -perm /6000 ! -path /usr/bin/ssh-agent 2>/dev/null')
+          [ -z "$left" ] || { echo "::error::setuid/setgid files left: $left"; exit 1; }
           for shell in 'sh -c' 'bash -lc'; do
             docker exec smoke $shell 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) exit 1 ;; esac' \
               || { echo "::error::~/.local/bin is not on PATH in '$shell'"; exit 1; }
