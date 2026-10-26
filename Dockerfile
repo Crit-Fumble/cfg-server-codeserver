@@ -127,7 +127,9 @@ RUN set -eux; \
 #     ~/.cache, which needs no root once these libraries exist.
 #   - sudo is purged (cs#550). Upstream ships it passwordless for `coder`; on
 #     CFG hosting no-new-privileges already made it useless, and the dev
-#     tooling now gets from the image what it used to ask sudo for.
+#     tooling now gets from the image what it used to ask sudo for. Its prerm
+#     refuses removal on an image with no root password unless
+#     SUDO_FORCE_REMOVE=yes: the lockout it guards against is the point here.
 #   - ~/.local/bin is where a user installs their own tools, and the home
 #     starts with no shell rc to put it on PATH. ENV covers every process;
 #     /etc/profile resets PATH in bash and sh login shells, so profile.d puts it
@@ -143,7 +145,7 @@ RUN set -eux; \
     gitleaks version; \
     npx -y "playwright@${PLAYWRIGHT_VERSION}" install-deps chromium; \
     rm -rf /var/lib/apt/lists/* /root/.npm; \
-    apt-get purge -y sudo; \
+    SUDO_FORCE_REMOVE=yes apt-get purge -y sudo; \
     rm -rf /etc/sudoers /etc/sudoers.d; \
     test -z "$(command -v sudo)"; \
     printf '%s\n' 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac' \
