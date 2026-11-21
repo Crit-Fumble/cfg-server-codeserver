@@ -130,8 +130,9 @@ does.
 
 ## Gating
 
-Alpha: admin-only (the kind is hidden from the Create Server picker and the
-installation POST rejects non-admins).
+Alpha: admin-only, or a member an admin granted it to (the kind is hidden from
+the Create Server picker for non-admins, and the installation POST rejects
+anyone else).
 
 ## License
 
